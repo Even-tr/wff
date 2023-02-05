@@ -3,6 +3,8 @@ This is a simple script which analyses sentences in propositional logic.
 It accepts any sentencen that follows the grammar which i maybe shall outline at a later date.
 """
 import numpy as np
+import graphviz
+from graphing import *
 
 # Atomics are letters for formulae assumed to be formule (??)
 atomics = 'abcdefghijklmnopqrstuwxyz'
@@ -39,7 +41,8 @@ class wff:
             self._empty = False
 
         # Since spaces have no syntactic nor semantic meaning, they can be discarded 
-        string = ''.join(string.split())
+        self.string = ''.join(string.split())
+        string = self.string
 
         # Propositions with any symbol outside the alphabet
         # is automatically rejected
@@ -72,6 +75,16 @@ class wff:
         # Callback function which appends leaves to the atomic set
         func = lambda x: self.atomics.add(x.symbol) if(x.leaf) else None
         traverse_tree(self.root, func )
+
+    def make_graph(self):
+        self.graph = graphviz.Graph(comment= self.string, format='PNG')
+        #traverse_tree(self.root, lambda x: self.graph.node(str(id(x)), x.symbol))
+        func = lambda x, y: make_DOT_tree(x, graph=self.graph, parent=y)
+        traverse_tree_parent(self.root, None, func)
+
+    def display_graph(self):
+        self.graph.render('doctest-output/round-table.gv', view=True)
+
 
 
 class wff_node:
@@ -178,7 +191,7 @@ def find_outer_bijection(string: str):
     return None, -1
 
 
-def traverse_tree(formula: wff, func: callable):
+def traverse_tree(formula: wff, func: callable) -> None:
     """
     Traverses wff-tree and callbacks the function func. The callback function expects only one argument
     which is the current wff.
@@ -191,8 +204,7 @@ def traverse_tree(formula: wff, func: callable):
     # Stop recursion at leaves
     if formula.leaf:
         return
-
-
+    
     # Recursive logic
     if formula.l and formula.r:
         traverse_tree(formula.l, func)
@@ -207,6 +219,33 @@ def traverse_tree(formula: wff, func: callable):
     else:
         raise RuntimeError('This is all wrong!! The switch statement was supposed to cover all cases?!')
 
+def traverse_tree_parent(formula: wff_node, parent:wff_node, func: callable):
+    """
+    Traverses wff-tree and callbacks the function func. The callback function expects only one argument
+    which is the current wff.
+    """
+    if not formula.accepted:
+        return
+    # Apply function 
+    func(formula, parent)
+
+    # Stop recursion at leaves
+    if formula.leaf:
+        return
+
+    # Recursive logic
+    if formula.l and formula.r:
+        traverse_tree_parent(formula.l, formula, func)
+        traverse_tree_parent(formula.r, formula, func)
+
+    elif formula.l:
+        traverse_tree_parent(formula.l, formula, func)
+
+    elif formula.r:
+        traverse_tree_parent(formula.r, formula, func)
+    
+    else:
+        raise RuntimeError('This is all wrong!! The switch statement was supposed to cover all cases?!')
 
 
 def make_wff(s1, s2) -> wff:
@@ -222,12 +261,22 @@ def make_wff(s1, s2) -> wff:
     return '(' + s1 + np.random.choice(dyacdic) + s2 + ')'
 
 
+
 if __name__ == '__main__':
     good_sentences = ['a', 'p', 'p⊃q','¬(p⊃q)', '((p⊃q)⊃r)⊃(∼t⊃q)']
-    for s in good_sentences:
-        print(wff(s))
+    f = wff(good_sentences[4])
+    f.make_graph()
+    f.display_graph()
 
+    for s in good_sentences:
+        f = wff(s)
+        print(f)
+
+    #simple_graphviz_test()
+ 
+    """
     for i in range(100):
         tmp_string = make_wff(*np.random.choice(good_sentences, 2))
         tmp = wff(tmp_string)
         print(tmp, tmp.accepted(), tmp.atomics)
+    """

@@ -2,6 +2,7 @@ import pytest
 from hypothesis import given, assume, strategies as st
 from script import wff, wff_node, alphabet
 
+
 good_sentences = ['a', 'p', 'p⊃q','¬(p⊃q)']
 
 def test_simple_wff():
