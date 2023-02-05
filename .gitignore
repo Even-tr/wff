@@ -1,7 +1,12 @@
+# Custum .gitignore
 /.hypothesis
 /.pytest_cache
 /.__pycache__
-doctest-output/*
+doctest-output
+.vscode
+
+
+
 # Created by https://www.toptal.com/developers/gitignore/api/python,macos,visualstudiocode,windows,linux
 # Edit at https://www.toptal.com/developers/gitignore?templates=python,macos,visualstudiocode,windows,linux
 

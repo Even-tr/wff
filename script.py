@@ -4,7 +4,7 @@ It accepts any sentencen that follows the grammar which i maybe shall outline at
 """
 import numpy as np
 import graphviz
-from graphing import *
+from graphing import make_DOT_tree
 
 # Atomics are letters for formulae assumed to be formule (??)
 atomics = 'abcdefghijklmnopqrstuwxyz'
@@ -54,10 +54,13 @@ class wff:
         self.root = wff_node(string)
         if self.accepted:
             self.find_atmoics()
-        
+            self.graph = graphviz.Graph(comment= self.string, format='PNG')
 
     
     def accepted(self) -> bool:
+        """
+        Returns True if the string was parsed without error
+        """
         if not self._empty:
             return self.root.accepted
         else:
@@ -66,7 +69,7 @@ class wff:
     def __str__(self):
         return "wff: " + str(self.root)
 
-    def find_atmoics(self) -> set:
+    def find_atmoics(self) -> None:
         """
         Finds all the unique atmoic sentences for making truth tables.
         """
@@ -76,8 +79,10 @@ class wff:
         func = lambda x: self.atomics.add(x.symbol) if(x.leaf) else None
         traverse_tree(self.root, func )
 
-    def make_graph(self):
-        self.graph = graphviz.Graph(comment= self.string, format='PNG')
+    def make_graph(self) -> None:
+        """
+        Makes a DOT graph
+        """
         #traverse_tree(self.root, lambda x: self.graph.node(str(id(x)), x.symbol))
         func = lambda x, y: make_DOT_tree(x, graph=self.graph, parent=y)
         traverse_tree_parent(self.root, None, func)
@@ -116,7 +121,7 @@ class wff_node:
 
         # Case: binary operator
         else:
-            self.symbol, index = find_outer_bijection(string)
+            self.symbol, index = find_outer_operation(string)
             if index <= 0 or len(string)<= index :
                 self.well_formed = False
                 raise ValueError(f"'{string}' is not valid")
@@ -139,7 +144,6 @@ class wff_node:
         else:
             raise RuntimeError('This is all wrong!! The switch statement was supposed to cover all cases?!')
 
-
     def __str__(self):
         if not self.well_formed:
             #raise ValueError
@@ -151,8 +155,10 @@ class wff_node:
 
         return '(' + str(self.l) + self.symbol + str(self.r) + ')'
 
-
 def remove_outer_parenthesis(string: str)->bool:
+    """
+    Returns True if a string needs its outermost parenthesis removed before further parsing
+    """
     if string[0] != '(' or string[-1] != ')':
         return False
     
@@ -173,7 +179,11 @@ def remove_outer_parenthesis(string: str)->bool:
     return True
 
 ##### Some helper functions #####
-def find_outer_bijection(string: str):
+def find_outer_operation(string: str):
+    """
+    Finds the outermost operation in a given string. Raises
+    a ValueError if not found.
+    """
     if len(string) <3:
         raise ValueError(f"'{string}' was passed as a bijoection, but is too short")
 
@@ -188,8 +198,6 @@ def find_outer_bijection(string: str):
             return l, i
 
     raise ValueError(f"'{string}' has no valid bijection")
-    return None, -1
-
 
 def traverse_tree(formula: wff, func: callable) -> None:
     """
@@ -198,7 +206,8 @@ def traverse_tree(formula: wff, func: callable) -> None:
     """
     if not formula.accepted:
         return
-    # Apply function 
+    
+    # Apply function
     func(formula)
 
     # Stop recursion at leaves
@@ -247,18 +256,20 @@ def traverse_tree_parent(formula: wff_node, parent:wff_node, func: callable):
     else:
         raise RuntimeError('This is all wrong!! The switch statement was supposed to cover all cases?!')
 
-
-def make_wff(s1, s2) -> wff:
-    if s1[0] != '(' and s1 not in atomics:
-        s1 = '('+s1+')'
+def make_wff(s_1: wff, s_2: wff) -> wff:
+    """
+    Makes a random wff from the tw
+    """
+    if s_1[0] != '(' and s_1 not in atomics:
+        s_1 = '('+s_1+')'
 
     if np.random.random() < 0.2:
-        return negation[0] + s1
+        return negation[0] + s_1
     
-    if s2[0] != '(' and s2 not in atomics:
-        s2 = '(' + s2 + ')'
+    if s_2[0] != '(' and s_2 not in atomics:
+        s_2 = '(' + s_2 + ')'
 
-    return '(' + s1 + np.random.choice(dyacdic) + s2 + ')'
+    return '(' + s_1 + np.random.choice(dyacdic) + s_2 + ')'
 
 
 
@@ -272,8 +283,6 @@ if __name__ == '__main__':
         f = wff(s)
         print(f)
 
-    #simple_graphviz_test()
- 
     """
     for i in range(100):
         tmp_string = make_wff(*np.random.choice(good_sentences, 2))
