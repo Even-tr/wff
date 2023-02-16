@@ -26,21 +26,19 @@ disjunction = '∨+∥v'
 
 # Truth value functions
 def negation_eval(r):
-    return not r
+    return int(not r)
 
 def implication_eval(l,r):
-    if l and not r:
-        return False
-    return True
+    return int((l == False) or (r == True))
 
 def equivalence_eval(l, r):
-    return l == r
+    return int(l == r)
 
 def conjunction_eval(l, r):
-    return l and r
+    return int(l and r)
 
 def disjunction_eval(l, r):
-    return l or r
+    return int(l or r)
 
 operations = {
     negation: negation_eval,
@@ -55,6 +53,10 @@ operations = {
 monadic = negation
 dyacdic = implication + equivalence + conjunction + disjunction
 alphabet = monadic + dyacdic + atomics + punctoation
+
+##### ##### ##### ##### ##### #####  
+##### #####   CLASSES   ##### ##### 
+##### ##### ##### ##### ##### #####  
 
 class wff:
     """
@@ -85,6 +87,8 @@ class wff:
             self.find_atmoics()
             self.graph = graphviz.Graph(comment= self.string, format='PNG')
 
+        self.main_column = []
+
 
     def truth_table(self):
         pass
@@ -110,6 +114,8 @@ class wff:
         # Callback function which appends leaves to the atomic set
         func = lambda x: self.atomics.add(x.symbol) if(x.leaf) else None
         traverse_tree(self.root, func )
+        self.atomics_ordered = list(self.atomics)
+        self.atomics_ordered.sort()
 
     def make_graph(self) -> None:
         """
@@ -124,11 +130,28 @@ class wff:
 
 
     def make_table(self):
+        #print(f'\nMaking table for {self.string}')
         self.Table = TableMaker(self.string)
-        for line in self.Table.table:
+            
+        for index in range(2**self.Table.depth):
+            line = self.Table.get_line()
+            value, string = self.root.evaluate_line(line, self.atomics_ordered)
+            self.main_column.append(value)
+            #print(f'VALUE: {value}, LINE: {string}')
+            self.Table.add_truth_value_line(string)
 
-            print(self.root.evaluate_line(line, str(self.atomics)))
+    def display(self):
+        self.Table.display()
 
+    def tatulogy(self):
+        return not any(x == 0 for x in self.main_column)
+    
+    def contradiction(self):
+        return not any(x == 1 for x in self.main_column)
+    
+    def contingent(self):
+        return not self.tatulogy() and not self.contradiction()
+    
 class wff_node:
     def __init__(self, string: str):
         self.l      = None
@@ -137,7 +160,7 @@ class wff_node:
         self.well_formed = True
         self.leaf = False
 
-        if remove_outer_parenthesis(string):
+        if find_outer_parenthesis(string):
             string = string[1:-1]
 
         # Base case
@@ -185,14 +208,30 @@ class wff_node:
         else:
             raise RuntimeError('This is all wrong!! The switch statement was supposed to cover all cases?!')
 
-    def evaluate_line(self, line, colnames):
+    def evaluate_line(self, line: np.array, colnames: list, callback = lambda x: x):
         """
         Takes a line from a truth table and returns
         """
+        # initialize with an illegal value to catch errors
+        value = -2
+
         if self.leaf:
-            return str(line[colnames.find(self.symbol)])
+            value = line[colnames.index(self.symbol)]
+            return value, str(value)
+
+
+        elif self.symbol in monadic:
+            r, rstring = self.r.evaluate_line(line, colnames, callback=callback)
+            value = self._eval_func(r)
+            return value, str(value) + rstring
+
+
         else:
-            return self.l.evaluate_line(line, colnames) + self._eval_func(self.l, self.r) + self.l.evaluate_line(line, colnames)
+            l, lstring = self.l.evaluate_line(line, colnames, callback=callback)
+            r, rstring = self.r.evaluate_line(line, colnames, callback=callback)
+            value = self._eval_func(l, r)
+            return value, lstring + str(value) + rstring
+
 
     def __str__(self):
         if not self.well_formed:
@@ -204,8 +243,6 @@ class wff_node:
             return self.symbol + self.r.__str__()
 
         return '(' + str(self.l) + self.symbol + str(self.r) + ')'
-
-
 
 
 class TableMaker:
@@ -240,6 +277,7 @@ class TableMaker:
         # counter used to keep track where to insert calculated truth values
         self._current_line = -1
         self._current_col = -1
+        self._current_flat_index = -1
         self.left_header = list(set(self.atomics))
         self.left_header.sort()
         
@@ -254,7 +292,7 @@ class TableMaker:
         print(tabulate(full_table, headers=self._make_table_header()))
 
     def _make_table_header(self):        
-        ls = re.split( f'(\(*[{atomics + monadic + dyacdic}]\)*)', s)
+        ls = re.split( f'(\\(*[{atomics + monadic + dyacdic}]\\)*)', self._unparsed_string)
         right_header = [i for i in ls if i != '']
         assert ''.join(right_header) == self._unparsed_string, \
             f"Parsing error: '{self._unparsed_string}' was parsed to '{''.join(right_header)}'"
@@ -269,15 +307,20 @@ class TableMaker:
 
         return self.left_table[self._current_line]
     
-    def add_truth_value(self, value: int):
-        self._current_col = (self._current_col + 1) % self.out_widt
-        self.right_table[self._current_line:self._current_col] = value
+    def add_truth_value_line(self, line: str):
+        line = [int(i) for i in line]
+        for v in line:
+            assert v == 0 or v == 1, f'Illegal value {v} found in line'
+        
+        self.right_table[self._current_line] = line
+
 
 
 ##### ##### ##### ##### ##### ##### 
-##### Some helper functions #####
+#####  Some helper functions  #####
 ##### ##### ##### ##### ##### ##### 
-def remove_outer_parenthesis(string: str)->bool:
+
+def find_outer_parenthesis(string: str)->bool:
     """
     Returns True if a string needs its outermost parenthesis removed before further parsing
     """
@@ -395,13 +438,14 @@ def make_wff(s_1: wff, s_2: wff) -> wff:
 
 
 if __name__ == '__main__':
-    good_sentences = ['a', 'p', 'p⊃q','¬(p⊃q)', '((p⊃q)⊃r)⊃(∼t⊃q)']
-    f = wff(good_sentences[1])
+    good_sentences = ['a', 'p', 'p⊃q', 'p+¬p' ,'¬(p⊃q)', '((p⊃q)⊃r)⊃(∼t⊃q)']
+    f = wff(good_sentences[3])
     f.make_table()
 
     for s in good_sentences:
         f = wff(s)
-        print(f)
+        f.make_table()
+        print(f.contradiction())
 
     """
     for i in range(100):

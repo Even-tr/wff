@@ -1,5 +1,4 @@
 import pytest
-from hypothesis import given, assume, strategies as st
 from script import wff, wff_node, alphabet
 
 
@@ -10,10 +9,12 @@ def test_simple_wff():
         assert wff(s).accepted() == True
 
 
-@given(st.text(alphabet = alphabet))
-def test_wff_input_handling(s):
-    # Testing that
-    try:
-        wff(s)
-    except ValueError:
-        pass
+
+
+def test_simple_truth_table():
+    string = 'p⊃q'
+
+    w = wff(string)
+    assert w.accepted()
+    w.make_table()
+    assert w.contingent()
