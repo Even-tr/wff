@@ -5,6 +5,9 @@ It accepts any sentencen that follows the grammar which i maybe shall outline at
 import numpy as np
 import graphviz
 from graphing import make_DOT_tree
+from itertools import product
+from tabulate import tabulate
+import re
 
 # Atomics are letters for formulae assumed to be formule (??)
 atomics = 'abcdefghijklmnopqrstuwxyz'
@@ -13,19 +16,45 @@ atomics = 'abcdefghijklmnopqrstuwxyz'
 punctoation = '()'
 
 # single variable operators
-negation    = ['¬', '˜', '!', '∼']
+negation    = '¬˜!∼'
 
 # double variable operators
-implication = ['⇒', '→', '⊃']
-equivalence = ['⇔', '≡', '↔']
-conjunction = ['∧', '·', '&']
-disjunction = ['∨', '+', '∥', 'v']
+implication = '⇒→⊃'
+equivalence = '⇔≡↔'
+conjunction = '∧·&'
+disjunction = '∨+∥v'
+
+# Truth value functions
+def negation_eval(r):
+    return not r
+
+def implication_eval(l,r):
+    if l and not r:
+        return False
+    return True
+
+def equivalence_eval(l, r):
+    return l == r
+
+def conjunction_eval(l, r):
+    return l and r
+
+def disjunction_eval(l, r):
+    return l or r
+
+operations = {
+    negation: negation_eval,
+    implication: implication_eval,
+    equivalence: equivalence_eval,
+    conjunction: conjunction_eval,
+    disjunction: disjunction_eval
+}
 
 # Combining classes of symbols for ease of use later by making the methods refer to them generically
 # rather than by name.
 monadic = negation
 dyacdic = implication + equivalence + conjunction + disjunction
-alphabet = monadic + dyacdic + list(atomics) + list(punctoation)
+alphabet = monadic + dyacdic + atomics + punctoation
 
 class wff:
     """
@@ -56,7 +85,10 @@ class wff:
             self.find_atmoics()
             self.graph = graphviz.Graph(comment= self.string, format='PNG')
 
-    
+
+    def truth_table(self):
+        pass
+
     def accepted(self) -> bool:
         """
         Returns True if the string was parsed without error
@@ -91,6 +123,11 @@ class wff:
         self.graph.render('doctest-output/round-table.gv', view=True)
 
 
+    def make_table(self):
+        self.Table = TableMaker(self.string)
+        for line in self.Table.table:
+
+            print(self.root.evaluate_line(line, str(self.atomics)))
 
 class wff_node:
     def __init__(self, string: str):
@@ -99,7 +136,6 @@ class wff_node:
         self.symbol = None
         self.well_formed = True
         self.leaf = False
-
 
         if remove_outer_parenthesis(string):
             string = string[1:-1]
@@ -129,6 +165,11 @@ class wff_node:
             self.l = wff_node(string[:index])
             self.r = wff_node(string[index+1:])
 
+                    
+        for key in operations:
+            if self.symbol in key:
+                self._eval_func = operations[key]
+
     @property 
     def accepted(self) -> bool:
         if self.leaf:
@@ -144,6 +185,15 @@ class wff_node:
         else:
             raise RuntimeError('This is all wrong!! The switch statement was supposed to cover all cases?!')
 
+    def evaluate_line(self, line, colnames):
+        """
+        Takes a line from a truth table and returns
+        """
+        if self.leaf:
+            return str(line[colnames.find(self.symbol)])
+        else:
+            return self.l.evaluate_line(line, colnames) + self._eval_func(self.l, self.r) + self.l.evaluate_line(line, colnames)
+
     def __str__(self):
         if not self.well_formed:
             #raise ValueError
@@ -155,6 +205,78 @@ class wff_node:
 
         return '(' + str(self.l) + self.symbol + str(self.r) + ')'
 
+
+
+
+class TableMaker:
+    def __init__(self, string: str) -> None:
+        """
+        A class which generates the template table for a truth table.
+        Ii calculates the needed size and creates a 2d array of it. 
+        
+        It then makes the left hand side with the assigned truth values for the 
+        atmoic prepositions.
+
+        It uses tabulate internally for pretty printing.
+        """
+        self._unparsed_string = string
+
+        # Remove punctioation
+        for i in punctoation:
+            string = string.replace(i, '')
+
+        self.atomics = [i for i in string if i in atomics]
+        self.operations = [i for i in string if i in monadic or i in dyacdic]
+        self.depth = len(set(self.atomics))
+        self.out_widt = len(self.atomics) + len(self.operations)
+
+        assert len(string) == len(self.atomics) + len(self.operations)
+        
+        self.left_table = np.zeros((2**self.depth, self.depth), dtype=int)
+        self.right_table = np.zeros((2**self.depth, self.out_widt), dtype=int) - 1
+        self._make_table()
+
+
+        # counter used to keep track where to insert calculated truth values
+        self._current_line = -1
+        self._current_col = -1
+        self.left_header = list(set(self.atomics))
+        self.left_header.sort()
+        
+
+    def _make_table(self):
+        for i, line in enumerate(product((1, 0), repeat=self.depth)):
+            self.left_table[i:] = line
+
+    def display(self):
+        print(f'\nTruth table for {self._unparsed_string}')
+        full_table = np.concatenate((self.left_table, self.right_table), axis=1)
+        print(tabulate(full_table, headers=self._make_table_header()))
+
+    def _make_table_header(self):        
+        ls = re.split( f'(\(*[{atomics + monadic + dyacdic}]\)*)', s)
+        right_header = [i for i in ls if i != '']
+        assert ''.join(right_header) == self._unparsed_string, \
+            f"Parsing error: '{self._unparsed_string}' was parsed to '{''.join(right_header)}'"
+
+        return self.left_header + right_header
+
+
+    def get_line(self):
+        self._current_line += 1
+        assert self._current_line <= len(self.left_table), \
+            f'Tried to acces line {self._current_line} in table with {len(self.left_table)} lines'
+
+        return self.left_table[self._current_line]
+    
+    def add_truth_value(self, value: int):
+        self._current_col = (self._current_col + 1) % self.out_widt
+        self.right_table[self._current_line:self._current_col] = value
+
+
+##### ##### ##### ##### ##### ##### 
+##### Some helper functions #####
+##### ##### ##### ##### ##### ##### 
 def remove_outer_parenthesis(string: str)->bool:
     """
     Returns True if a string needs its outermost parenthesis removed before further parsing
@@ -178,7 +300,6 @@ def remove_outer_parenthesis(string: str)->bool:
         
     return True
 
-##### Some helper functions #####
 def find_outer_operation(string: str):
     """
     Finds the outermost operation in a given string. Raises
@@ -199,7 +320,7 @@ def find_outer_operation(string: str):
 
     raise ValueError(f"'{string}' has no valid bijection")
 
-def traverse_tree(formula: wff, func: callable) -> None:
+def traverse_tree(formula: wff_node, func: callable) -> None:
     """
     Traverses wff-tree and callbacks the function func. The callback function expects only one argument
     which is the current wff.
@@ -275,9 +396,8 @@ def make_wff(s_1: wff, s_2: wff) -> wff:
 
 if __name__ == '__main__':
     good_sentences = ['a', 'p', 'p⊃q','¬(p⊃q)', '((p⊃q)⊃r)⊃(∼t⊃q)']
-    f = wff(good_sentences[4])
-    f.make_graph()
-    f.display_graph()
+    f = wff(good_sentences[1])
+    f.make_table()
 
     for s in good_sentences:
         f = wff(s)
